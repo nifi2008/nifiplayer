@@ -38,29 +38,59 @@ jobs:
             sed -i 's#<application#<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n\n    <application#' "$MANIFEST"
           fi
 
-      - name: Get dependencies
-        run: flutter pub get
-
-      - name: Patch on_audio_query plugin
+      - name: Configure all plugin modules (SDK 35, JVM 17)
         run: |
-          PLUGIN_DIR=$(ls -d $HOME/.pub-cache/hosted/pub.dev/on_audio_query_android-*/ | head -n 1)
-          GRADLE_FILE="$PLUGIN_DIR/android/build.gradle"
-          echo "Patching $GRADLE_FILE"
+          if [ -f android/build.gradle.kts ]; then
+            cat >> android/build.gradle.kts << 'EOF'
 
-          # نسخه‌ی Java و Kotlin را روی 17 قرار بده
-          sed -i 's/VERSION_1_8/VERSION_17/g; s/VERSION_11/VERSION_17/g' "$GRADLE_FILE"
-          sed -i "s/jvmTarget *= *['\"]1\.8['\"]/jvmTarget = '17'/g; s/jvmTarget *= *['\"]11['\"]/jvmTarget = '17'/g" "$GRADLE_FILE"
+subprojects {
+    afterEvaluate {
+        if (name != "app") {
+            val androidExt = extensions.findByName("android")
+            if (androidExt is com.android.build.gradle.BaseExtension) {
+                androidExt.compileSdkVersion(35)
+                androidExt.compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_17
+                    targetCompatibility = JavaVersion.VERSION_17
+                }
+            }
+        }
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+            kotlinOptions {
+                jvmTarget = "17"
+            }
+        }
+    }
+}
+EOF
+            echo "Configured android/build.gradle.kts"
+          else
+            cat >> android/build.gradle << 'EOF'
 
-          # compileSdk را به 35 ببر (هر دو سینتکس قدیمی و جدید)
-          sed -i -E 's/compileSdkVersion[ =]+[0-9]+/compileSdkVersion 35/; s/compileSdk[ =]+[0-9]+/compileSdk 35/' "$GRADLE_FILE"
-
-          # اضافه کردن namespace در صورت نبود
-          if ! grep -q "namespace" "$GRADLE_FILE"; then
-            sed -i "s/^android {/android {\n    namespace 'com.lucasjosino.on_audio_query'/" "$GRADLE_FILE"
+subprojects {
+    afterEvaluate { p ->
+        if (p.name != 'app' && p.hasProperty('android')) {
+            p.android {
+                compileSdkVersion 35
+                compileOptions {
+                    sourceCompatibility JavaVersion.VERSION_17
+                    targetCompatibility JavaVersion.VERSION_17
+                }
+            }
+        }
+        p.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions {
+                jvmTarget = '17'
+            }
+        }
+    }
+}
+EOF
+            echo "Configured android/build.gradle"
           fi
 
-          echo "--- Result ---"
-          grep -n "namespace\|compileSdk\|VERSION_\|jvmTarget" "$GRADLE_FILE" || true
+      - name: Get dependencies
+        run: flutter pub get
 
       - name: Build release APK
         run: flutter build apk --release
