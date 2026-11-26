@@ -41,6 +41,19 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Fix on_audio_query namespace
+        run: |
+          PLUGIN_DIR=$(ls -d $HOME/.pub-cache/hosted/pub.dev/on_audio_query_android-*/ | head -n 1)
+          GRADLE_FILE="$PLUGIN_DIR/android/build.gradle"
+          MANIFEST_FILE="$PLUGIN_DIR/android/src/main/AndroidManifest.xml"
+          NS=$(grep -o 'package="[^"]*"' "$MANIFEST_FILE" | head -n 1 | cut -d'"' -f2)
+          NS=${NS:-com.lucasjosino.on_audio_query}
+          echo "Using namespace: $NS"
+          if ! grep -q "namespace" "$GRADLE_FILE"; then
+            sed -i "s/^android {/android {\n    namespace '$NS'/" "$GRADLE_FILE"
+          fi
+          grep -n "namespace" "$GRADLE_FILE" || echo "namespace not added"
+
       - name: Build release APK
         run: flutter build apk --release
 
