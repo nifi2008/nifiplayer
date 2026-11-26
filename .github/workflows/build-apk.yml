@@ -41,18 +41,26 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Fix on_audio_query namespace
+      - name: Patch on_audio_query plugin
         run: |
           PLUGIN_DIR=$(ls -d $HOME/.pub-cache/hosted/pub.dev/on_audio_query_android-*/ | head -n 1)
           GRADLE_FILE="$PLUGIN_DIR/android/build.gradle"
-          MANIFEST_FILE="$PLUGIN_DIR/android/src/main/AndroidManifest.xml"
-          NS=$(grep -o 'package="[^"]*"' "$MANIFEST_FILE" | head -n 1 | cut -d'"' -f2)
-          NS=${NS:-com.lucasjosino.on_audio_query}
-          echo "Using namespace: $NS"
+          echo "Patching $GRADLE_FILE"
+
+          # همسان کردن نسخه‌ی Java و Kotlin روی 17
+          sed -i 's/VERSION_1_8/VERSION_17/g; s/VERSION_11/VERSION_17/g' "$GRADLE_FILE"
+          sed -i "s/jvmTarget *= *['\"]1\.8['\"]/jvmTarget = '17'/g; s/jvmTarget *= *['\"]11['\"]/jvmTarget = '17'/g" "$GRADLE_FILE"
+
+          # اضافه کردن namespace در صورت نبود
           if ! grep -q "namespace" "$GRADLE_FILE"; then
-            sed -i "s/^android {/android {\n    namespace '$NS'/" "$GRADLE_FILE"
+            sed -i "s/^android {/android {\n    namespace 'com.lucasjosino.on_audio_query'/" "$GRADLE_FILE"
           fi
-          grep -n "namespace" "$GRADLE_FILE" || echo "namespace not added"
+
+          # تنظیم صریح نسخه‌ی کامپایل روی 17
+          sed -i "s/^android {/android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n    kotlinOptions {\n        jvmTarget = '17'\n    }/" "$GRADLE_FILE"
+
+          echo "--- Result ---"
+          grep -n "namespace\|VERSION_\|jvmTarget" "$GRADLE_FILE" || true
 
       - name: Build release APK
         run: flutter build apk --release
