@@ -47,20 +47,20 @@ jobs:
           GRADLE_FILE="$PLUGIN_DIR/android/build.gradle"
           echo "Patching $GRADLE_FILE"
 
-          # همسان کردن نسخه‌ی Java و Kotlin روی 17
+          # نسخه‌ی Java و Kotlin را روی 17 قرار بده
           sed -i 's/VERSION_1_8/VERSION_17/g; s/VERSION_11/VERSION_17/g' "$GRADLE_FILE"
           sed -i "s/jvmTarget *= *['\"]1\.8['\"]/jvmTarget = '17'/g; s/jvmTarget *= *['\"]11['\"]/jvmTarget = '17'/g" "$GRADLE_FILE"
+
+          # compileSdk را به 35 ببر (هر دو سینتکس قدیمی و جدید)
+          sed -i -E 's/compileSdkVersion[ =]+[0-9]+/compileSdkVersion 35/; s/compileSdk[ =]+[0-9]+/compileSdk 35/' "$GRADLE_FILE"
 
           # اضافه کردن namespace در صورت نبود
           if ! grep -q "namespace" "$GRADLE_FILE"; then
             sed -i "s/^android {/android {\n    namespace 'com.lucasjosino.on_audio_query'/" "$GRADLE_FILE"
           fi
 
-          # تنظیم صریح نسخه‌ی کامپایل روی 17
-          sed -i "s/^android {/android {\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n    kotlinOptions {\n        jvmTarget = '17'\n    }/" "$GRADLE_FILE"
-
           echo "--- Result ---"
-          grep -n "namespace\|VERSION_\|jvmTarget" "$GRADLE_FILE" || true
+          grep -n "namespace\|compileSdk\|VERSION_\|jvmTarget" "$GRADLE_FILE" || true
 
       - name: Build release APK
         run: flutter build apk --release
