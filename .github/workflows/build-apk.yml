@@ -25,68 +25,73 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate Android project files (if missing)
+      - name: Generate Android project files
         run: |
           if [ ! -d android ]; then
             flutter create --platforms=android --project-name nifiplayer --org com.nifi .
           fi
 
-      - name: Add permissions to AndroidManifest
+      - name: Add audio permissions
         run: |
           MANIFEST=android/app/src/main/AndroidManifest.xml
           if ! grep -q "READ_MEDIA_AUDIO" "$MANIFEST"; then
             sed -i 's#<application#<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n\n    <application#' "$MANIFEST"
           fi
 
-      - name: Configure all plugin modules (SDK 35, JVM 17)
+      - name: Fix plugin SDK, JVM and namespace
         run: |
           if [ -f android/build.gradle.kts ]; then
             cat >> android/build.gradle.kts << 'EOF'
 
-subprojects {
-    afterEvaluate {
-        if (name != "app") {
-            val androidExt = extensions.findByName("android")
-            if (androidExt is com.android.build.gradle.BaseExtension) {
-                androidExt.compileSdkVersion(35)
-                androidExt.compileOptions {
-                    sourceCompatibility = JavaVersion.VERSION_17
-                    targetCompatibility = JavaVersion.VERSION_17
-                }
-            }
-        }
-        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-            kotlinOptions {
-                jvmTarget = "17"
-            }
-        }
-    }
-}
-EOF
-            echo "Configured android/build.gradle.kts"
+          subprojects {
+              afterEvaluate {
+                  if (plugins.hasPlugin("com.android.library")) {
+                      extensions.configure<com.android.build.gradle.LibraryExtension> {
+                          if (namespace == null) {
+                              namespace = "com.nifi.plugin." + project.name.replace("-", "_")
+                          }
+                          compileSdk = 35
+                          compileOptions {
+                              sourceCompatibility = JavaVersion.VERSION_17
+                              targetCompatibility = JavaVersion.VERSION_17
+                          }
+                      }
+                  }
+                  tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+                      compilerOptions {
+                          jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+                      }
+                  }
+              }
+          }
+          EOF
+            echo "kts configured"
           else
             cat >> android/build.gradle << 'EOF'
 
-subprojects {
-    afterEvaluate { p ->
-        if (p.name != 'app' && p.hasProperty('android')) {
-            p.android {
-                compileSdkVersion 35
-                compileOptions {
-                    sourceCompatibility JavaVersion.VERSION_17
-                    targetCompatibility JavaVersion.VERSION_17
-                }
-            }
-        }
-        p.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions {
-                jvmTarget = '17'
-            }
-        }
-    }
-}
-EOF
-            echo "Configured android/build.gradle"
+          subprojects {
+              afterEvaluate { p ->
+                  if (p.plugins.hasPlugin('com.android.library')) {
+                      p.android {
+                          if (namespace == null) {
+                              namespace = 'com.nifi.plugin.' + p.name.replace('-', '_')
+                          }
+                          compileSdkVersion 35
+                          compileOptions {
+                              sourceCompatibility JavaVersion.VERSION_17
+                              targetCompatibility JavaVersion.VERSION_17
+                          }
+                      }
+                  }
+                  p.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                      kotlinOptions {
+                          jvmTarget = '17'
+                      }
+                  }
+              }
+          }
+          EOF
+            echo "groovy configured"
           fi
 
       - name: Get dependencies
